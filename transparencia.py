@@ -122,7 +122,7 @@ OLD_side_ph = [   #hack para forçar os sliders sempre no topo da sidebar
 
 side_ph = ""     #just to keep signature of put_sliders_sidebar()
 
-def put_sliders_sidebar(option, side_ph, is_radar):
+def put_sliders_sidebar(option, side_ph, is_radar, assunto=''):
     #coloca um slider na área lateral, abaixo do menu, para possibilitar 
     # ao usuário alterar os valores de altura/largura do gráfico, se quiser:
     if is_radar:
@@ -132,7 +132,11 @@ def put_sliders_sidebar(option, side_ph, is_radar):
         chart_width = init_sizes_bars[option][0]
         chart_height = init_sizes_bars[option][1]
 
-    #side_ph é uma lista que tem 2 placeholders no topo da sidebar
+        #hack específico para a altura do assunto "III.1", devido a ter muuuuitas questões:
+        if "III.1" in assunto:
+            chart_height=1200
+
+    #side_ph é uma lista que tem 2 placeholders no topo da sidebar (deixamos de usar aqui)
     st_width = st.sidebar.slider("Largura do gráfico:", 
                     min_value=300, max_value=2200, 
                     step=100, value=chart_width, )   #value aqui é o INICIAL apenas, ele vai
@@ -715,7 +719,8 @@ if option == 7:
     df3 = df3.sort_values(by='questão', ascending=True)
 
     st_chk_radar = st.sidebar.checkbox('Marque aqui para ver este gráfico no formato "Radar" ', value=False)
-    st_width, st_height = put_sliders_sidebar(option, side_ph, st_chk_radar) #poe sliders para altura/largura do gráfico
+    #poe sliders para altura/largura do gráfico:
+    st_width, st_height = put_sliders_sidebar(option, side_ph, st_chk_radar, st_assunto) 
 
     #inicia plotagem do gráfico radar/barras das questões do assunto, para a empresa
     if st_chk_radar: #plota gráfico no formato de radar
@@ -1058,5 +1063,4 @@ if option == 9:
 
         fig.update_yaxes(autorange="reversed") #mostra do maior para o menor valor 
         st.plotly_chart(fig)
-
 
