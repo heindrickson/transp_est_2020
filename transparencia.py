@@ -27,6 +27,15 @@ st.markdown( f"""
 </style>
 """,  unsafe_allow_html=True,)
 
+#custom font para comentários:
+st.markdown("""
+<style>
+.comment {
+    font-size:10px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 @st.cache 
 def get_dados_2020(): 
     #url = "indices_para_streamlit.xlsx"
@@ -80,8 +89,8 @@ option = int(str(sb_menu)[0])
 #      (o objeto session abaixo deixou de ser utilizado neste código)
 #session = SessionState.get(option=99999)     #valor INICIAL apenas
 
-init_sizes_bars={1:[900, 1050], 2:[900, 500], 3:[944, 1033], 4:[950, 2750], 
-                5:[900, 1050], 6:[950, 800], 7:[800, 700], 8:[900, 1050], 9:[950, 800], }
+init_sizes_bars={1:[600, 1000], 2:[700, 400], 3:[600, 1000], 4:[600, 2500], 
+                5:[600, 1000], 6:[700, 700], 7:[600, 700], 8:[600, 1400], 9:[700, 700], }
 init_sizes_radars={6:[900, 500], 7:[600,600], 8:[900, 700], 9:[900, 500]}
 
 assuntos = ["I. 1 – ADERÊNCIA À LAI",
@@ -122,27 +131,52 @@ OLD_side_ph = [   #hack para forçar os sliders sempre no topo da sidebar
 
 side_ph = ""     #just to keep signature of put_sliders_sidebar()
 
-def put_sliders_sidebar(option, side_ph, is_radar, assunto=''):
+def put_sliders_sidebar(option, side_ph, is_radar, nr_itens=10):
     #coloca um slider na área lateral, abaixo do menu, para possibilitar 
     # ao usuário alterar os valores de altura/largura do gráfico, se quiser:
+    max_height = 3000
     if is_radar:
         chart_width = init_sizes_radars[option][0]
         chart_height = init_sizes_radars[option][1]
     else:
         chart_width = init_sizes_bars[option][0]
         chart_height = init_sizes_bars[option][1]
-
-        #hack específico para a altura do assunto "III.1", devido a ter muuuuitas questões:
-        if "III.1" in assunto:
-            chart_height=1200
-
-    #side_ph é uma lista que tem 2 placeholders no topo da sidebar (deixamos de usar aqui)
+        #hack específico para alturas variáveis da opção 7:
+        factor = 1
+        if option == 7:
+            if nr_itens <=4:
+                factor = 1.4
+            elif nr_itens <=7:
+                factor = 1.3 
+            elif nr_itens <=10:
+                factor = 1.2 
+            elif nr_itens <=15:
+                factor = 1.1 
+            elif nr_itens <=20:
+                factor = 1.0 
+            elif nr_itens <=25:
+                factor = 0.9 
+            elif nr_itens <=30:
+                factor = 0.8 
+            elif nr_itens <=40:
+                factor = 0.7 
+            elif nr_itens <=50:
+                factor = 0.6 
+            elif nr_itens <=50:
+                factor = 0.6 
+            chart_height = factor *  (50 * nr_itens)     
+            chart_height = int(round(chart_height/100 ,0) )*100  #arredonda para multiplo de 100    
+            max_height = int( round(max_height/factor/100, 0) ) * 100
+            if chart_height < 300:
+                chart_height = 300
+            max_height = int(max(4*chart_height, max_height))
+    #side_ph é uma lista que tem 2 placeholders no topo da sidebar (deixamos de usar isso)
     st_width = st.sidebar.slider("Largura do gráfico:", 
                     min_value=300, max_value=2200, 
                     step=100, value=chart_width, )   #value aqui é o INICIAL apenas, ele vai
                                                     #sendo modificado ao se clicar no slider 
     st_height = st.sidebar.slider("Altura do gráfico:", 
-                    min_value=300, max_value=3000, 
+                    min_value=300, max_value=max_height, 
                     step=100, value=chart_height, )    #value aqui é o INICIAL apenas, ele vai
                                                     #sendo modificado ao se clicar no slider 
     return st_width, st_height
@@ -190,16 +224,33 @@ def plot_questoes():
                     ),
     )])
 
+    fig.update_layout(
+        # ajusta margin superior e inferior porque estão enormes: 
+        margin=dict(t=25, b=25, pad=3),
+    )
+
     st.plotly_chart(fig)
 
-    # No texto abaixo, 2 spaces = line break
-    st.markdown('''_Observações sobre as questões_:  
-- _O questionário acima é genérico e contém questões para outros tipos de instituições, 
-não é exclusivo para as empresas estatais_  
-- _As questões efetivamente aplicadas às empresas estatais é um subset do conjunto acima_  
-- _Esse subset é apresentado nos gráficos e tabelas de dados de cada uma das análises disponíveis na caixa de seleção acima_
-    ''')
+    st.markdown('''
+<p><span style="font-size:small;">
+<em>
+Observações sobre as questões: 
+</em></span>
+</p>
+<ul style="font-size:small;">
+	<li style="font-size:small;"><em>
+    O questionário acima é genérico e contém também questões para outros tipos de instituições, não é exclusivo para as empresas estatais
+    </em></span></li>
+	<li style="font-size:small;"><em>
+    As questões efetivamente aplicadas às empresas estatais é um subset do conjunto acima    </em></span></li>
+	<li style="font-size:small;"><em>
+    O subset das questões aplicadas às empresas estatais é apresentado nos próprios gráficos e tabelas de dados de cada uma das análises disponíveis na caixa de seleção acima
+    </em></span></li>
+</ul>
+''', unsafe_allow_html=True)
 
+
+#option=2 # uncomment when DEBUGGING
 
 
 #------------00000--------------
@@ -233,6 +284,7 @@ _Por essa razão, as empresas estão identificadas apenas pelo "ID" da sua respo
 
 #------------11111--------------
 if option == 1:
+
     df2 = get_dados_2020().copy() # necessário clonar, se for alterar algo cached pelo streamlit
     #Comentar o comando abaixo para revelar o nome da empresa na tabela plotada
     df2 = df2.append(df2.mean().rename("Médias"))
@@ -271,7 +323,10 @@ if option == 1:
 #        yaxis_hoverformat = '.2%',
         xaxis_tickformat = '.0%',  # se barra horizontal, vale para valores em X e Hover
         xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
+        yaxis_tickfont = dict(size=11), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
         autosize=False,
+        # ajusta margin superior e inferior porque estão enormes: 
+        margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
         width=st_width, # 900, 
         height=st_height, #1050,
     )
@@ -279,7 +334,7 @@ if option == 1:
     fig.update_yaxes(autorange="reversed") #mostra do maior para o menor valor de ÍNDICE 
 
     fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
-    fig.update_yaxes(automargin = True)  #idem
+#    fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
 #    fig.update_xaxes(autorange = True)   #calcula autom. o range max e min dos valores
 #    fig.update_yaxes(autorange = True)   #idem
 
@@ -328,11 +383,18 @@ if option == 2:
         separators = ',',  # força virgula como separador decimal
         xaxis_tickformat = '.0%',  # se barra horizontal, vale para valores em X e Hover
         xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
+        yaxis_tickfont = dict(size=11), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
         autosize=False,
+        # ajusta margin superior e inferior porque estão enormes: 
+        margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
         width= st_width, # 950,
         height= st_height, #500,
     )
-    fig.update_yaxes(autorange="reversed") #para mostrar na ordem de valor menor>>>maior 
+    fig.update_yaxes(autorange="reversed", #para mostrar na ordem de valor menor>>>maior 
+        #tickangle = -45, #bota os labels no eixo y em posição de 45 graus
+    ) 
+    fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
+#    fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
 
     st.plotly_chart(fig)
 
@@ -380,11 +442,16 @@ if option == 3:
         separators = ',',  # força virgula como separador decimal
         xaxis_tickformat = '.0%',  # se barra horizontal, vale para valores em X e Hover
         xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
+        yaxis = dict( tickfont = dict(size=11)), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
         autosize=False,
+        # ajusta margin superior e inferior porque estão enormes: 
+        margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
         width=st_width, # 900, 
         height=st_height, #1050,
     )
     fig.update_yaxes(autorange="reversed") #mostra do maior para o menor valor de ÍNDICE 
+    fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
+#    fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
 
     st.plotly_chart(fig)
 
@@ -437,12 +504,16 @@ if option == 4:
         separators = ',',  # força virgula como separador decimal
         xaxis_tickformat = '.0%',  # se barra horizontal, vale para valores em X e Hover
         xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
-        yaxis = dict( tickfont = dict(size=9)), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
+        yaxis_tickfont = dict(size=9), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
         autosize=False,
+        # ajusta margin superior e inferior porque estão enormes: 
+        margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
         width= st_width, # 950,
         height= st_height, #1500,
     )
     fig.update_yaxes(autorange="reversed") #para mostrar na ordem de valor menor>>>maior 
+    fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
+#    fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
     
     st.plotly_chart(fig)
 
@@ -501,11 +572,16 @@ if option == 5:
         separators = ',',  # força virgula como separador decimal
         xaxis_tickformat = '.0%',  # se barra horizontal, vale para valores em X e Hover
         xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
+        yaxis_tickfont = dict(size=11), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
         autosize=False,
+        # ajusta margin superior e inferior porque estão enormes: 
+        margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
         width=st_width, # 900, 
         height=st_height, #1050,
     )
     fig.update_yaxes(autorange="reversed") #mostra do maior para o menor valor de ÍNDICE 
+    fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
+#    fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
 
     st.plotly_chart(fig)
 
@@ -667,12 +743,22 @@ if option == 6:
             xaxis_tickformat = '.0%',  # se barra horizontal, vale para valores em X e Hover
             xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
             autosize=False,
+            yaxis_tickfont = dict(size=11), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
             barmode = 'group', #necessário quando usado fig.add_trace para mais de uma série 
+            legend=dict(
+                orientation="h", 
+                y = -0.06,   # bottom left is x=0, y=0; top right is  y=+1, x=+1;  
+                x = 0.0
+            ),
+            # ajusta margin superior e inferior porque estão enormes: 
+            margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
             width=st_width, # 950, 
             height=st_height, #860,
         )
 
         fig.update_yaxes(autorange="reversed") #mostra do maior para o menor valor 
+        fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
+#        fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
         st.plotly_chart(fig)
 
 
@@ -720,7 +806,9 @@ if option == 7:
 
     st_chk_radar = st.sidebar.checkbox('Marque aqui para ver este gráfico no formato "Radar" ', value=False)
     #poe sliders para altura/largura do gráfico:
-    st_width, st_height = put_sliders_sidebar(option, side_ph, st_chk_radar, st_assunto) 
+    nr_itens = len(colunas_manter)
+    st_width, st_height = put_sliders_sidebar(option, side_ph, st_chk_radar, nr_itens)
+    posbar_legend = -1 * round((50/st_height), 2) 
 
     #inicia plotagem do gráfico radar/barras das questões do assunto, para a empresa
     if st_chk_radar: #plota gráfico no formato de radar
@@ -802,11 +890,21 @@ if option == 7:
             xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
             autosize=False,
             barmode = 'group', #necessário quando usado fig.add_trace para mais de uma série 
+            legend=dict(
+                orientation="h", 
+                y = posbar_legend,   # bottom left is x=0, y=0; top right is  y=+1, x=+1;  
+                x = 0.0
+            ),
+            # ajusta margin superior e inferior porque estão enormes: 
+            margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
             width= st_width, # 900,
             height= st_height, #840,
         )
 
         fig.update_yaxes(autorange="reversed") #mostra do maior para o menor valor 
+        fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
+#        fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
+
         st.plotly_chart(fig)
 
     st_chk_quest = st.sidebar.checkbox('Marque aqui para visualizar as questões do questionário', value=False)
@@ -821,7 +919,8 @@ if option == 8:
     dfoc = get_dados_FOC()[["ID_RESP_2020", 'ÍNDICE DE TRANSPARÊNCIA CALCULADO']]
     dfoc.rename(columns={'ÍNDICE DE TRANSPARÊNCIA CALCULADO': "índice"}, inplace=True)
 
-    df2 = df2.merge(dfoc, on="ID_RESP_2020", suffixes=('_2020', '_2016'))
+    #left join dos dados de 2020 e da foc2016 (há empresas de 2020 que não estavam em 2016):
+    df2 = df2.merge(dfoc, on="ID_RESP_2020", how = "left", suffixes=('_2020', '_2016'))
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     if st_chk_dados:
@@ -916,13 +1015,23 @@ if option == 8:
             separators = ',',  # força virgula como separador decimal
             xaxis_tickformat = '.0%',  # se barra horizontal, vale para valores em X e Hover
             xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
+            yaxis_tickfont = dict(size=11), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
             autosize=False,
             barmode = 'group', #necessário quando usado fig.add_trace para mais de uma série 
+            legend=dict(
+                orientation="h", 
+                y = -0.03,   # bottom left is x=0, y=0; top right is  y=+1, x=+1;  
+                x = 0.0
+            ),
+            # ajusta margin superior e inferior porque estão enormes: 
+            margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
             width=st_width, # 950, 
             height=st_height, #860,
         )
 
         fig.update_yaxes(autorange="reversed") #mostra do maior para o menor valor 
+        fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
+#        fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
         st.plotly_chart(fig)
 
 
@@ -1057,10 +1166,20 @@ if option == 9:
             xaxis_hoverformat = '.2%', # formato hover pega daqui ou, se ausente, de tickformat
             autosize=False,
             barmode = 'group', #necessário quando usado fig.add_trace para mais de uma série 
+            yaxis_tickfont = dict(size=11), # gráfico muito longo, diminuímos fonte para aparecer todos os labels
+            legend=dict(
+                orientation="h", 
+                y = -0.06,   # bottom left is x=0, y=0; top right is  y=+1, x=+1;  
+                x = 0.0
+            ),
+            # ajusta margin superior e inferior porque estão enormes: 
+            margin=dict(t=30, b=30, pad=3), # <<-- IMPORTANTE remover automargin de yaxes
             width=st_width, # 950, 
             height=st_height, #860,
         )
-
         fig.update_yaxes(autorange="reversed") #mostra do maior para o menor valor 
+        fig.update_xaxes(automargin = True)  #calcula autom. margin de modo a não cortar texto de labels
+#        fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
+
         st.plotly_chart(fig)
 
