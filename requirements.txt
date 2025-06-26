@@ -1,5 +1,4 @@
-plotly_express==0.4.1
-streamlit==0.76.0
-plotly==4.14.3
-pandas==1.2.1
-Pillow==8.1.0
+plotly==6.1.2
+plotly-express==0.4.1
+streamlit==1.46.0
+#pandas also used, it is installed as required by plotly-express
