@@ -1,5 +1,4 @@
 import streamlit as st
-import SessionState  #   SessionState.py (https://gist.github.com/tvst/036da038ab3e999a64497f42de966a92)
 import pandas as pd
 import plotly_express as px
 import plotly.graph_objects as go
@@ -36,27 +35,27 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache 
+@st.cache_data  
 def get_dados_2020(): 
     #url = "indices_para_streamlit.xlsx"
     url = "índices2020_UTF8.csv"
     #df = pd.read_excel(url, sheet_name="Índices2020")
     df = pd.read_csv(url, sep=";", decimal=",", header=0,) # encoding='iso-8859-1')
     df.drop(["NOME DA EMPRESA", "id", "Nome"], axis=1, inplace = True) #não mostrar esses campos
-    df["ID_RESP_2020"] = df["ID_RESP_2020"].astype(str) 
+    #df["ID_RESP_2020"] = df["ID_RESP_2020"].astype(str)  # Comentado - Precisa ser 'int' para coluna aparecer no resultado de mean(), Pandas 2.x
     return df
 
-@st.cache 
+@st.cache_data  
 def get_dados_FOC(): 
     #url = "indices_para_streamlit.xlsx"
     url = "índicesFOC_UTF8.csv"
     #df = pd.read_excel(url, sheet_name="ÍndicesFOC")
     df = pd.read_csv(url, sep=";", decimal=",", header=0,) # encoding='iso-8859-1')
     df.drop(["NOME"], axis=1, inplace = True) #não mostrar esses campos
-    df["ID_RESP_2020"] = df["ID_RESP_2020"].astype(str) 
+    #df["ID_RESP_2020"] = df["ID_RESP_2020"].astype(str)  # Comentado - Precisa ser 'int' para coluna aparecer no resultado de mean(), Pandas 2.x
     return df
 
-@st.cache 
+@st.cache_data  
 def get_questoes(): 
     #url = "indices_para_streamlit.xlsx"
     url = "questões_UTF8.csv"
@@ -85,9 +84,6 @@ sb_menu = st.selectbox("", menu)
 #pega a opção/radio selecionado:
 option = int(str(sb_menu)[0])
 
-# obs: que os valores na session são INICIAIS (atualizados em outras partes do código)
-#      (o objeto session abaixo deixou de ser utilizado neste código)
-#session = SessionState.get(option=99999)     #valor INICIAL apenas
 
 init_sizes_bars={1:[600, 1000], 2:[700, 400], 3:[600, 1000], 4:[600, 2500], 
                 5:[600, 1000], 6:[700, 700], 7:[600, 700], 8:[600, 1400], 9:[700, 700], }
@@ -250,14 +246,12 @@ Observações sobre as questões:
 ''', unsafe_allow_html=True)
 
 
-#option=2 # uncomment when DEBUGGING
-
 
 #------------00000--------------
-if option == 0:
+def handle_option0():
     st.sidebar.write("")
     image = Image.open('imagem_transparencia.jpg')
-    st.sidebar.image(image, caption='', use_column_width=True)    
+    st.sidebar.image(image, caption='', use_container_width=True)
     st.markdown('#### Introdução')
     st.markdown('  ') # line break
     st.markdown('''
@@ -283,12 +277,15 @@ _Por essa razão, as empresas estão identificadas apenas pelo "ID" da sua respo
 
 
 #------------11111--------------
-if option == 1:
-
+def handle_option1():
     df2 = get_dados_2020().copy() # necessário clonar, se for alterar algo cached pelo streamlit
-    #Comentar o comando abaixo para revelar o nome da empresa na tabela plotada
-    df2 = df2.append(df2.mean().rename("Médias"))
-    df2["ID_RESP_2020"]["Médias"]="Média" 
+    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
+    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
+    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
+    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
+    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
  
     #plota a planilha de 2020:
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
@@ -342,10 +339,15 @@ if option == 1:
 
 
 #------------22222--------------
-if option == 2:
+def handle_option2():
     df2 = get_dados_2020()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
-    df2 = df2.append(df2.mean().rename('Médias'))
-    df2["ID_RESP_2020"]["Médias"]="Média:" 
+    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
+    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
+    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
+    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
+    mean_row["ID_RESP_2020"] = "Médias"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -360,10 +362,11 @@ if option == 2:
 
     #prepara para gráfico de barras com ranking pela nota média de cada Assunto.
     df3 = df2.drop("ID_RESP_2020", axis=1) #só precisava para visualização do datf
-    df3 = df3.iloc[-1,:]  #pega só a última linha, que tem as médias
-    #type(df3)  #df3 é só uma Series depois do acima
-    df3 = pd.DataFrame(df3) #volta a ser dataframe
-    df3 = df3.reset_index() #operação acima gera um index
+    sr3 = df3.iloc[-1,:]  #pega só a última linha, que tem as médias, resulta uma Series
+    #type(sr3)  # sr3 é só uma Series depois do acima
+    sr3.name="Médias"  # Renomeia a Series, isso vai ser o título de coluna depois que virar Dataframe
+    df3 = pd.DataFrame(sr3) #volta a ser dataframe
+    df3 = df3.reset_index() #operação acima gerou um index, reseta para voltar a ser coluna
     df3.rename(columns={"index": "Assunto"}, inplace=True)
     df3 = df3.sort_values(by="Médias", ascending=True)
 
@@ -400,10 +403,15 @@ if option == 2:
 
 
 #------------33333--------------
-if option == 3:
+def handle_option3():
     df2 = get_dados_2020()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
-    df2 = df2.append(df2.mean().rename('Médias'))
-    df2["ID_RESP_2020"]["Médias"]="Média" #melhor para o gráfico de barras adiante
+    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
+    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
+    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
+    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
+    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -457,7 +465,7 @@ if option == 3:
 
 
 #------------44444--------------
-if option == 4:
+def handle_option4():
     colunas_manter = ["ID_RESP_2020"] #necessária para visualizar o datf apenas
     for key, arr in mapa_questoes.items():    
         colunas_manter = colunas_manter + arr  #concatena os vários arrays acima; gera um só
@@ -465,8 +473,13 @@ if option == 4:
     #filtra só as colunas que tem as Questões:
     df2 = get_dados_2020().loc[:, colunas_manter]
 
-    df2 = df2.append(df2.mean().rename('Médias'))
-    df2["ID_RESP_2020"]["Médias"]="Média:" 
+    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
+    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
+    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
+    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
+    mean_row["ID_RESP_2020"] = "Médias"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -481,10 +494,11 @@ if option == 4:
 
     #prepara para gráfico de barras com ranking pela nota média de cada Questão
     df3 = df2.drop("ID_RESP_2020", axis=1) #só precisava para visualização do datf
-    df3 = df3.iloc[-1,:]  #pega só a última linha, que tem as médias
-    #type(df3)  #df3 é só uma Series depois do acima
-    df3 = pd.DataFrame(df3) #volta a ser dataframe
-    df3 = df3.reset_index() #operação acima gera um index
+    sr3 = df3.iloc[-1,:]  #pega só a última linha, que tem as médias, resulta uma Series
+    #type(sr3)  # sr3 é só uma Series depois do acima
+    sr3.name="Médias"  # Renomeia a Series, isso vai ser o título de coluna depois que virar Dataframe
+    df3 = pd.DataFrame(sr3) #volta a ser dataframe
+    df3 = df3.reset_index() #operação acima gerou um index, reseta para voltar a ser coluna
     df3.rename(columns={"index": "Questão"}, inplace=True)
     df3 = df3.sort_values(by="Médias", ascending=True)
 
@@ -523,7 +537,7 @@ if option == 4:
 
 
 #------------55555--------------
-if option == 5:
+def handle_option5():
     colunas_manter = ["ID_RESP_2020"] # ID necessário para visualizar o datf apenas
     for key, arr in mapa_questoes.items():    
         colunas_manter = colunas_manter + arr  #concatena os vários arrays acima; gera um só
@@ -531,8 +545,13 @@ if option == 5:
     #filtra só as colunas que tem o ID e as colunas das Questões:
     df2 = get_dados_2020().loc[:, colunas_manter]
 
-    df2 = df2.append(df2.mean().rename('Médias'))
-    df2["ID_RESP_2020"]["Médias"]="Média:" 
+    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
+    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
+    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
+    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
+    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -591,10 +610,15 @@ if option == 5:
     
 
 #------------66666--------------
-if option == 6:
+def handle_option6():
     df2 = get_dados_2020()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
-    df2 = df2.append(df2.mean().rename('Médias'))
-    df2["ID_RESP_2020"]["Médias"]="Média" #melhor para o gráfico de barras adiante
+    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
+    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
+    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
+    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
+    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     if st_chk_dados:
@@ -763,10 +787,15 @@ if option == 6:
 
 
 #------------77777--------------
-if option == 7:
+def handle_option7():
     df2 = get_dados_2020().copy() # necessário clonar, se for alterar algo cached pelo streamlit
-    df2 = df2.append(df2.mean().rename("Médias"))
-    df2["ID_RESP_2020"]["Médias"]="Média" 
+    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
+    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
+    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico 
+    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
+    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
 
@@ -913,11 +942,14 @@ if option == 7:
 
 
 #------------88888--------------
-if option == 8:
+def handle_option8():
     df2 = get_dados_2020()[["ID_RESP_2020", 'ÍNDICE DE TRANSPARÊNCIA CALCULADO']]
     df2.rename(columns={'ÍNDICE DE TRANSPARÊNCIA CALCULADO': "índice"}, inplace=True)
     dfoc = get_dados_FOC()[["ID_RESP_2020", 'ÍNDICE DE TRANSPARÊNCIA CALCULADO']]
     dfoc.rename(columns={'ÍNDICE DE TRANSPARÊNCIA CALCULADO': "índice"}, inplace=True)
+
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante    
+    dfoc["ID_RESP_2020"] = dfoc["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante    
 
     #left join dos dados de 2020 e da foc2016 (há empresas de 2020 que não estavam em 2016):
     df2 = df2.merge(dfoc, on="ID_RESP_2020", how = "left", suffixes=('_2020', '_2016'))
@@ -1036,9 +1068,12 @@ if option == 8:
 
 
 #------------99999--------------
-if option == 9:
+def handle_option9():
     df2 = get_dados_2020()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
     dfoc = get_dados_FOC()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
+
+    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante    
+    dfoc["ID_RESP_2020"] = dfoc["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante        
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
 
@@ -1063,7 +1098,8 @@ if option == 9:
         dfoc3 = pd.DataFrame([values], columns = col_names)
 
     ## junta as linhas de dados de 2016 e 2020 da mesma empresa: 
-    df3 = df3.append(dfoc3, ignore_index=True )
+    #df3 = df3.append(dfoc3, ignore_index=True )  # substituído pelo concat() abaixo
+    df3 = pd.concat([df3, dfoc3], ignore_index=True )
 
     if st_chk_dados:
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
@@ -1182,4 +1218,28 @@ if option == 9:
 #        fig.update_yaxes(automargin = True)  #comentar se setada margin top e bottom
 
         st.plotly_chart(fig)
+
+
+#---- Main program ----
+#option=2 # uncomment when DEBUGGING
+if option == 0:
+    handle_option0()
+elif option==1:
+    handle_option1()
+elif option==2:
+    handle_option2()
+elif option==3:
+    handle_option3()
+elif option==4:
+    handle_option4()
+elif option==5:
+    handle_option5()
+elif option==6:
+    handle_option6()
+elif option==7:
+    handle_option7()
+elif option==8:
+    handle_option8()
+elif option==9:
+    handle_option9()
 
