@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to Streamlit and Debug app",
+      "type": "debugpy",
+      "request": "attach",
+
+      // Replace with your remote host or keep "localhost" for local apps
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+
+      // Set to false if you want to debug libraries/dependencies as well
+      "justMyCode": false,
+
+      // Optional: Set this if source files are different between local and remote
+      // "pathMappings": [
+      //   {
+      //     "localRoot": "${workspaceFolder}",
+      //     "remoteRoot": "/path/to/code/on/remote"
+      //   }
+      // ],
+
+      // Optional: Show all threads (helpful for web apps)
+      "showReturnValue": true
+    }
+  ]
+}
+
