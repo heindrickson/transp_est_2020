@@ -1,4 +1,5 @@
 plotly==6.1.2
 plotly-express==0.4.1
 streamlit==1.46.0
+debugpy==1.8.14
 #pandas also used, it is installed as required by plotly-express
