@@ -5,23 +5,76 @@ import plotly.graph_objects as go
 from PIL import Image
 import math
 import locale
+import debugpy
+import argparse; import os
+
+
+# Streamlit is greedy, it thinks all parameters are for its own use...
+# But, there is a trick: we can  pass our parameters/arguments after a "--" used as separator: 
+#      streamlit run myapp.py -- --animal dog --sort down
+# Note the difference: 
+#      streamlit run myapp.py --help    # will show the help for streamlit
+# and:
+#      streamlit run myapp.py -- --help # will show the help for the app.
+# See: https://gist.github.com/markopy/ff82a054de47612f748fb6e388bf5588
+parser = argparse.ArgumentParser(description='Este app mostra resultados da Auditoria da Transparência das Estatais-2020')
+parser.add_argument('--debugpy', default=False, action='store_true',
+                    help="Habilita debug do app via debugpy (usar VSCode para isso)")
+try:
+    args = parser.parse_args()
+except SystemExit as e:
+    # This exception will be raised if "--debugpy" instead of "-- --debugpy" is used
+    # or any other invalid command line arguments are used. 
+    # Currently streamlit prevents the program from exiting normally
+    # so we have to do a hard exit.
+    print("HINT: Check the parameters, did you mean: \"-- --debugpy\"  ??")
+    os._exit(e.code)
+
+
+
+#==== TRECHO QUE PERMITE FAZER DEBUG A PARTIR DO VSCODE - START ===
+if args.debugpy and "debugpy_already_called" not in st.session_state:    
+    # Permite conectar remotamente com o VS Code
+    debugpy.listen(("localhost", 5678))
+    # Espera o VS Code conectar antes de continuar
+    print("Aguardando o debugger conectar...")
+    st.markdown("Aguardando o debugger conectar...")
+    debugpy.wait_for_client()
+    print("Debugger conectado.")
+    st.markdown("Debugger conectado.")
+    # Abaixo evita que a cada refazimento da tela o Streamlit tente rodar esse trecho com listen() na mesma porta, causando erro 
+    st.session_state.debugpy_already_called = True                  
+#==== TRECHO QUE PERMITE FAZER DEBUG A PARTIR DO VSCODE - END ===
+
+
 
 #locale.setlocale(locale.LC_ALL, 'pt_BR') # força o locale do Brasil
 locale.setlocale(locale.LC_ALL, '')  # Use '' for auto; gets the locale from OS
+
+# Abaixo reduz os "EMPTY-SPACE" no topo e embaixo da página (default no topo é demasiado):
+st.markdown( f"""
+<style>
+    .block-container{{
+        padding-top: 0.75rem;
+        padding-bottom: 5.00rem;
+    }}
+</style>
+""",  unsafe_allow_html=True,)
 
 st.set_page_config(layout='wide')  # <<== usa todo o espaço horizontal da janela do browser
 #Para alternativa mais granular, via injeção de html, ver resposta de matthewsjones em:
 # https://discuss.streamlit.io/t/custom-render-widths/81/8 
 
+# Abaixo seta o tamanho máximo da página...
 #ver: https://discuss.streamlit.io/t/where-to-set-page-width-when-set-into-non-widescreeen-mode/959/2
 st.markdown( f"""
 <style>
     .reportview-container .main .block-container{{
         max-width: 2000px;
-        padding-top: 2rem;
+        padding-top: 0rem;
         padding-right: 2rem;
         padding-left: 2rem;
-        padding-bottom: 2rem;
+        padding-bottom: 0rem;
     }}
 </style>
 """,  unsafe_allow_html=True,)
@@ -40,19 +93,33 @@ def get_dados_2020():
     #url = "indices_para_streamlit.xlsx"
     url = "índices2020_UTF8.csv"
     #df = pd.read_excel(url, sheet_name="Índices2020")
-    df = pd.read_csv(url, sep=";", decimal=",", header=0,) # encoding='iso-8859-1')
-    df.drop(["NOME DA EMPRESA", "id", "Nome"], axis=1, inplace = True) #não mostrar esses campos
-    #df["ID_RESP_2020"] = df["ID_RESP_2020"].astype(str)  # Comentado - Precisa ser 'int' para coluna aparecer no resultado de mean(), Pandas 2.x
+    df = pd.read_csv(url, sep=";", decimal=",", header=0,
+                     dtype={'ID_RESP_2020': 'str'},
+                     ) # encoding='iso-8859-1') era antes
+    ## As colunas abaixo estão VAZIAs no CSV, dropamos 
+    df.drop(["NOME DA EMPRESA", "id", "Nome"], axis=1, inplace = True) 
+    # Busca a coluna NOME_EMPRESA, via merge com outro CSV:
+    df_nomes = pd.read_csv("empresas2020_UTF8.csv", sep=";", header=0,
+                     dtype={'ID_RESP_2020': 'str'} )
+    df = df_nomes.merge(df, how="right", on="ID_RESP_2020") # df_nomes é 'left', deixa o nome na 2a coluna
     return df
+
+
 
 @st.cache_data  
 def get_dados_FOC(): 
     #url = "indices_para_streamlit.xlsx"
     url = "índicesFOC_UTF8.csv"
     #df = pd.read_excel(url, sheet_name="ÍndicesFOC")
-    df = pd.read_csv(url, sep=";", decimal=",", header=0,) # encoding='iso-8859-1')
-    df.drop(["NOME"], axis=1, inplace = True) #não mostrar esses campos
-    #df["ID_RESP_2020"] = df["ID_RESP_2020"].astype(str)  # Comentado - Precisa ser 'int' para coluna aparecer no resultado de mean(), Pandas 2.x
+    df = pd.read_csv(url, sep=";", decimal=",", header=0,
+                     dtype={'ID_RESP_2020': 'str'},
+                     ) # encoding='iso-8859-1') era antes
+    ## A coluna abaixo está VAZIA, dropamos 
+    df.drop(["NOME"], axis=1, inplace = True)
+    # Busca a coluna NOME_EMPRESA, via merge com outro CSV:
+    df_nomes = pd.read_csv("empresas2020_UTF8.csv", sep=";", header=0,
+                     dtype={'ID_RESP_2020': 'str'} )
+    df = df_nomes.merge(df, how="right", on="ID_RESP_2020") # df_nomes é 'left', deixa o nome na 2a coluna
     return df
 
 @st.cache_data  
@@ -79,7 +146,11 @@ menu = [  "0 Introdução",
 ]
 
 st.markdown('### Tipo de análise (selecione uma opção abaixo):')
-sb_menu = st.selectbox("", menu)
+sb_menu = st.selectbox(label="Tipo Análise", options=menu, label_visibility="hidden") 
+#Alteramos as chamadas a st.selectbox() a partir da v1.4 porque ficava dando warnings assim na console:
+#sb_menu = st.selectbox("", menu) 
+# LOGGER.warning(
+# 2025-06-28 12:01:08.419 `label` got an empty value. This is discouraged for accessibility reasons and may be disallowed in the future by raising an exception. Please provide a non-empty label and hide it with label_visibility if needed.
 
 #pega a opção/radio selecionado:
 option = int(str(sb_menu)[0])
@@ -255,20 +326,15 @@ def handle_option0():
     st.markdown('#### Introdução')
     st.markdown('  ') # line break
     st.markdown('''
-Em 2016, iniciou-se a primeira avaliação da transparência do sítio de órgãos e entidades federais na internet.  
-Em 2020, foi realizado acompanhamento para reavaliar a situação da transparência dessas instituições.  
-Este aplicativo mostra os resultados das 57 empresas estatais avaliadas em 2020.  
-Também é apresentada a evolução dos índices de transparência no período de 2016 a 2020.  
+Em 2016 foi realizada a primeira avaliação de transparência, a qual resultou no Acórdão 1.832/2018-TCU-Plenário, Rel. Min. Augusto Nardes.
+Em 2020, efetuou-se acompanhamento para reavaliar a situação da transparência dessas instituições (TC 008.538/2020-4, Acórdão 2.647/2020-TCU-Plenário e TC 015.971/2021-0, Acórdão 2.726/2021-TCU-Plenário, ambos de relatoria do Ministro Aroldo Cedraz).
+Este aplicativo mostra os resultados das 56 empresas estatais avaliadas em 2020 e também a evolução dos índices de transparência entre 2016 e 2020.
 Para ver os resultados, selecione uma opção por vez na caixa de seleção acima.
     ''') #<<-- there are line breaks here (2 * two spaces)
     st.markdown('''_Observações gerais:_  
-- _Para a avaliação dos sítios, as empresas inicialmente preencheram um questionário_
-_no qual diversos temas e critérios específicos de transparência foram avaliados._
-- _Posteriormente, os sítios das empresas foram objetivamente verificados pelos auditores _
-_e as respostas da autoavaliação das empresas foram eventualmente ajustadas._
-- _A divulgação dos nomes das empresas avaliadas em 2020 ainda não foi autorizada._
-_Por essa razão, as empresas estão identificadas apenas pelo "ID" da sua resposta ao questionário._
-- _O relatório deste trabalho ainda está em construção. Portanto, as informações aqui publicadas poderão sofrer alterações._
+- _Para a avaliação dos sítios, as empresas inicialmente preencheram um questionário no qual diversos temas e critérios específicos de transparência foram avaliados._
+- _Posteriormente, os sítios das empresas foram objetivamente verificados pelos auditores e as respostas da autoavaliação das empresas foram eventualmente ajustadas._
+- _Todas as informações da avaliação de tranparência realizada são consideradas públicas em face da autorização para divulgação contida no item 1.6.38. do Acórdão 2.726/2021-TCU-Plenário._
     ''')
 
     st_chk_quest = st.sidebar.checkbox('Marque aqui para visualizar as questões do questionário', value=False)
@@ -279,14 +345,7 @@ _Por essa razão, as empresas estão identificadas apenas pelo "ID" da sua respo
 #------------11111--------------
 def handle_option1():
     df2 = get_dados_2020().copy() # necessário clonar, se for alterar algo cached pelo streamlit
-    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
-    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
-    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
-    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
-    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
-    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
- 
+
     #plota a planilha de 2020:
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -294,7 +353,7 @@ def handle_option1():
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df2
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             #locale.format() faz usar "," como separador decimal, pois nosso locale é BR:
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
@@ -306,7 +365,7 @@ def handle_option1():
 
     #plota gráfico de barras do ranking do índice de transparência em 2020:                        
     fig = go.Figure(go.Bar(
-        y='ID-RESP-' + df2['ID_RESP_2020'],
+        y=df2['NOME_EMPRESA'],
         x=df2['ÍNDICE DE TRANSPARÊNCIA CALCULADO'],
         #textposition='auto',
         hovertemplate='Empresa: %{y}<br>Índice Transp.: = %{x}<extra></extra>',
@@ -340,14 +399,17 @@ def handle_option1():
 
 #------------22222--------------
 def handle_option2():
-    df2 = get_dados_2020()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
+    df_assuntos = get_dados_2020()[assuntos].copy() # necessário clonar, se for alterar algo cached pelo streamlit
     #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
     #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
-    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
-    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
-    mean_row["ID_RESP_2020"] = "Médias"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    #      No caso concreto, sabemos que TODAS colunas dos 'assuntos' são de tipos numéricos
+    mean_row = df_assuntos.mean()
+    # Necessário clonar, se for ALTERAR algo cached pelo streamlit:
+    df_colunas_alfa = get_dados_2020()[["ID_RESP_2020", "NOME_EMPRESA"]].copy().astype(str)
+    df2 = pd.concat([df_colunas_alfa, df_assuntos], axis=1)
     df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
+    df2["ID_RESP_2020"].iat[-1] = "Média"  #Seta um ID artificial para a linha das médias
+    df2["NOME_EMPRESA"].iat[-1] = "Média"  #Seta um NOME_EMPRESA artificial para a linha das médias
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -355,13 +417,13 @@ def handle_option2():
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df2
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
         st.dataframe(datf)
 
     #prepara para gráfico de barras com ranking pela nota média de cada Assunto.
-    df3 = df2.drop("ID_RESP_2020", axis=1) #só precisava para visualização do datf
+    df3 = df2.drop(["ID_RESP_2020", "NOME_EMPRESA"], axis=1) #só precisava para visualização do datf    
     sr3 = df3.iloc[-1,:]  #pega só a última linha, que tem as médias, resulta uma Series
     #type(sr3)  # sr3 é só uma Series depois do acima
     sr3.name="Médias"  # Renomeia a Series, isso vai ser o título de coluna depois que virar Dataframe
@@ -404,14 +466,7 @@ def handle_option2():
 
 #------------33333--------------
 def handle_option3():
-    df2 = get_dados_2020()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
-    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
-    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
-    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
-    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
-    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
-    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
+    df2 = get_dados_2020()[["ID_RESP_2020", "NOME_EMPRESA"] + assuntos] # id e todos assuntos, para plotar planilha
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -419,24 +474,28 @@ def handle_option3():
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df2
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
         st.dataframe(datf)
 
     #seleciona um assunto para o gráfico:
     st.markdown('#### Selecione o "Assunto" que será apresentado no gráfico:')
-    st_assunto = st.selectbox("", assuntos)
+    st_assunto = st.selectbox(label="Assunto", options=assuntos, label_visibility="hidden") 
+    #Alteramos as chamadas a st.selectbox() a partir da v1.4 porque ficava dando warnings assim:
+    #st_assunto = st.selectbox("", assuntos) 
+    # LOGGER.warning(
+    # 2025-06-28 12:01:08.419 `label` got an empty value. This is discouraged for accessibility reasons and may be disallowed in the future by raising an exception. Please provide a non-empty label and hide it with label_visibility if needed.
 
     #prepara os dados para o gráfico de barras 
-    df3 = df2[["ID_RESP_2020", st_assunto]]
+    df3 = df2[["NOME_EMPRESA", st_assunto]]
     df3 = df3.sort_values(by=st_assunto, ascending=False)
 
     st_width, st_height = put_sliders_sidebar(option, side_ph, False) #poe sliders para altura/largura do gráfico
 
     #plota gráfico de barras do ranking das empresas no Assunto/dimensão:
     fig = go.Figure(go.Bar(
-        y='ID-RESP-' + df3['ID_RESP_2020'],
+        y=df3['NOME_EMPRESA'],
         x=df3[st_assunto], 
         #textposition='auto',
         hovertemplate='Empresa: %{y}<br>' +
@@ -466,20 +525,24 @@ def handle_option3():
 
 #------------44444--------------
 def handle_option4():
-    colunas_manter = ["ID_RESP_2020"] #necessária para visualizar o datf apenas
+    colunas_num = []  
     for key, arr in mapa_questoes.items():    
-        colunas_manter = colunas_manter + arr  #concatena os vários arrays acima; gera um só
+        colunas_num = colunas_num + arr  #concatena os vários arrays acima; gera um só
 
     #filtra só as colunas que tem as Questões:
-    df2 = get_dados_2020().loc[:, colunas_manter]
+    df_colunas_num = get_dados_2020().loc[:, colunas_num].copy() # necessário clonar, se for alterar algo cached pelo streamlit
 
     #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
     #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
-    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
-    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
-    mean_row["ID_RESP_2020"] = "Médias"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    #      No caso concreto, sabemos que TODAS colunas dos 'assuntos' são de tipos numéricos
+    mean_row = df_colunas_num.mean()
+    # Colunas abaixo usadas para visualização dos dados apenas, 
+    df_colunas_alfa = get_dados_2020()[["ID_RESP_2020", "NOME_EMPRESA"]].copy().astype(str)
+
+    df2 = pd.concat([df_colunas_alfa, df_colunas_num], axis=1) #concatena por colunas lateralmente
     df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
+    df2["ID_RESP_2020"].iat[-1] = "Média"  #Seta um ID artificial para a linha das médias
+    df2["NOME_EMPRESA"].iat[-1] = "Média"  #Seta um NOME_EMPRESA artificial para a linha das médias
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -487,13 +550,13 @@ def handle_option4():
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df2
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
         st.dataframe(datf)
 
     #prepara para gráfico de barras com ranking pela nota média de cada Questão
-    df3 = df2.drop("ID_RESP_2020", axis=1) #só precisava para visualização do datf
+    df3 = df2.drop(["ID_RESP_2020", "NOME_EMPRESA"], axis=1) #só precisava para visualização do datf
     sr3 = df3.iloc[-1,:]  #pega só a última linha, que tem as médias, resulta uma Series
     #type(sr3)  # sr3 é só uma Series depois do acima
     sr3.name="Médias"  # Renomeia a Series, isso vai ser o título de coluna depois que virar Dataframe
@@ -538,20 +601,12 @@ def handle_option4():
 
 #------------55555--------------
 def handle_option5():
-    colunas_manter = ["ID_RESP_2020"] # ID necessário para visualizar o datf apenas
+    colunas_manter = ["ID_RESP_2020", "NOME_EMPRESA"] # ID necessário para visualizar o datf apenas
     for key, arr in mapa_questoes.items():    
         colunas_manter = colunas_manter + arr  #concatena os vários arrays acima; gera um só
 
     #filtra só as colunas que tem o ID e as colunas das Questões:
-    df2 = get_dados_2020().loc[:, colunas_manter]
-
-    #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
-    #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
-    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
-    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
-    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
-    df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
+    df2 = get_dados_2020().loc[:, colunas_manter].copy()
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True) #fake placeholder para manter o padrão com as outras opções
@@ -559,25 +614,29 @@ def handle_option5():
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df2
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
         st.dataframe(datf)
 
     #seleciona uma questão para o gráfico:
     st.markdown('#### Selecione a Questão que será apresentada no gráfico:')
-    colunas_manter.remove("ID_RESP_2020")
-    st_questao = st.selectbox("", colunas_manter)
+    colunas_manter.remove("ID_RESP_2020") ; colunas_manter.remove("NOME_EMPRESA") 
+    st_questao = st.selectbox(label="Questão", options=colunas_manter, label_visibility="hidden") 
+    #Alteramos as chamadas a st.selectbox() a partir da v1.4 porque ficava dando warnings assim:
+    #st_questao = st.selectbox("", colunas_manter) 
+    # LOGGER.warning(
+    # 2025-06-28 12:01:08.419 `label` got an empty value. This is discouraged for accessibility reasons and may be disallowed in the future by raising an exception. Please provide a non-empty label and hide it with label_visibility if needed.
 
     #prepara os dados para o gráfico de barras 
-    df3 = df2[["ID_RESP_2020", st_questao]]
+    df3 = df2[["NOME_EMPRESA", st_questao]]
     df3 = df3.sort_values(by=st_questao, ascending=False)
 
     st_width, st_height = put_sliders_sidebar(option, side_ph, False) #poe sliders para altura/largura do gráfico
 
     #plota gráfico de barras do ranking das empresas na Questão:
     fig = go.Figure(go.Bar(
-        y='ID-RESP-' + df3['ID_RESP_2020'],
+        y= df3['NOME_EMPRESA'],
         x=df3[st_questao], 
         #textposition='auto',
         hovertemplate='Empresa: %{y}<br>' +
@@ -611,37 +670,42 @@ def handle_option5():
 
 #------------66666--------------
 def handle_option6():
-    df2 = get_dados_2020()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
+    df_assuntos = get_dados_2020()[assuntos].copy() # necessário clonar, se for alterar algo cached pelo streamlit
     #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
     #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
-    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico
-    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
-    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    #      No caso concreto, sabemos que TODAS colunas dos 'assuntos' são de tipos numéricos
+    mean_row = df_assuntos.mean()
+    # Ajusta para tipo string a coluna ID_RESP_2020, pois ela foi criada como int,
+    # necessário clonar, se for ALTERAR algo cached pelo streamlit:
+    df_colunas_alfa = get_dados_2020()[["ID_RESP_2020", "NOME_EMPRESA"]].copy().astype(str)
+    df2 = pd.concat([df_colunas_alfa, df_assuntos], axis=1)
     df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
+    df2["ID_RESP_2020"].iat[-1] = "Média"  #Seta um ID artificial para a linha das médias
+    df2["NOME_EMPRESA"].iat[-1] = "Média"  #Seta um NOME_EMPRESA artificial para a linha das médias
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
     if st_chk_dados:
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df2
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
         st.dataframe(datf)
 
     #seleciona uma empresa para o gráfico:
     st.markdown('#### Selecione abaixo a empresa a ser apresentada no gráfico:')
-    empresas = 'ID-RESP-' + df2["ID_RESP_2020"]  # nomes das empresas
-    ids = df2["ID_RESP_2020"]
-    dic_empresas = dict(zip(empresas, ids))
-    st_empresa = st.selectbox("", empresas)      # apresenta pelo nome
-    st_empresa = dic_empresas.get(st_empresa)    # mas usa só ID numérico
+    empresas = df2["NOME_EMPRESA"]  # nomes das empresas
+    st_empresa = st.selectbox(label="Empresa", options=empresas, label_visibility="hidden") 
+    #Alteramos as chamadas a st.selectbox() a partir da v1.4 porque ficava dando warnings assim:
+    #st_empresa = st.selectbox("", empresas)      # apresenta pelo nome
+    # LOGGER.warning(
+    # 2025-06-28 12:01:08.419 `label` got an empty value. This is discouraged for accessibility reasons and may be disallowed in the future by raising an exception. Please provide a non-empty label and hide it with label_visibility if needed.
 
     #prepara os dados para o gráfico 
     ## pega só a linha da empresa selecionada e a linha da média:
-    df3 = df2.loc[(df2["ID_RESP_2020"]==st_empresa) | (df2["ID_RESP_2020"]=="Média") ]
-    df3 = df3.drop("ID_RESP_2020", axis = 1)
+    df3 = df2.loc[(df2["NOME_EMPRESA"]==st_empresa) | (df2["NOME_EMPRESA"]=="Média") ]
+    df3 = df3.drop(["ID_RESP_2020", "NOME_EMPRESA"], axis = 1)
     #transpõe:
     df3 = df3.T.reset_index()  #isso gera uma coluna "index", outra <num-row> e outra "Médias"
     df3.columns=['assunto', 'nota', 'média']
@@ -788,14 +852,23 @@ def handle_option6():
 
 #------------77777--------------
 def handle_option7():
-    df2 = get_dados_2020().copy() # necessário clonar, se for alterar algo cached pelo streamlit
+    colunas_alfa = ["ID_RESP_2020", "NOME_EMPRESA"]
+    # Ajusta para tipo string a coluna ID_RESP_2020, pois ela foi criada como int,
+    # necessário clonar, se for ALTERAR algo cached pelo streamlit:
+    df_colunas_alfa = get_dados_2020()[colunas_alfa].copy().astype(str)
+ 
+    # necessário clonar, se for alterar algo cached pelo streamlit
+    df_colunas_num = get_dados_2020().copy().drop(colunas_alfa, axis=1)
     #Nota: A partir de pandas 2.x, o mean() dará erro caso ALGUMA das colunas NÃO for numérica 
     #      Pode-se EXCLUIR colunas não numéricas via numeric_only=True -- mas resultado terá MENOS colunas que o original  
-    #      No caso concreto, sabemos que o mean() abaixo gerará médias para TODAS as colunas, pois TODAS têm type numérico 
-    mean_row = df2.mean()  # Gera uma Series/row apenas com as médias de cada coluna
-    mean_row["ID_RESP_2020"] = "Média"  # A média do ID da org é artificial, usaremos como label da linha de médias 
+    #      No caso concreto, sabemos que TODAS colunas selecionadas são de tipos numéricos
+    mean_row = df_colunas_num.mean()
+
+    # Devolve ao dataframe as colunas que NÃO são numéricas, pois já fizemos mean():
+    df2 = pd.concat([df_colunas_alfa, df_colunas_num], axis=1)
     df2.loc[len(df2)] = mean_row  # Adiciona a linha de médias ao final do dataframe
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante
+    df2["ID_RESP_2020"].iat[-1] = "Média"  #Seta um ID artificial para a linha das médias
+    df2["NOME_EMPRESA"].iat[-1] = "Média"  #Seta um NOME_EMPRESA artificial para a linha das médias
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
 
@@ -803,26 +876,23 @@ def handle_option7():
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df2
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
         st.dataframe(datf)
         
     #seleciona uma empresa para o gráfico:
     st.markdown('#### Selecione abaixo a empresa a ser apresentada no gráfico:')
-    empresas = 'ID-RESP-' + df2["ID_RESP_2020"]  # nomes das empresas
-    ids = df2["ID_RESP_2020"]
-    dic_empresas = dict(zip(empresas, ids))
-    st_empresa = st.selectbox("", empresas)      # apresenta pelo nome
-    st_empresa = dic_empresas.get(st_empresa)    # mas usa só ID numérico
+    empresas = df2["NOME_EMPRESA"]  # nomes das empresas
+    st_empresa = st.selectbox(label="Empresa", options=empresas, label_visibility="hidden") # apresenta pelo nome
 
     #seleciona um assunto/dimensão para o gráfico:
     st.markdown('#### Selecione abaixo um Assunto:')
-    st_assunto = st.selectbox("", assuntos)
+    st_assunto = st.selectbox(label="Assunto", options=assuntos, label_visibility="hidden") 
 
     #prepara os dados para o gráfico
     ## pega só a linha da empresa selecionada e a linha da média:
-    df3 = df2.loc[(df2["ID_RESP_2020"]==st_empresa) | (df2["ID_RESP_2020"]=="Média") ]
+    df3 = df2.loc[(df2["NOME_EMPRESA"]==st_empresa) | (df2["NOME_EMPRESA"]=="Média") ]
 
     #mantém apenas as colunas das questões relativas ao Assunto selecionado:
     colunas_manter = mapa_questoes[st_assunto] #retorna a lista de questões do Assunto
@@ -943,13 +1013,11 @@ def handle_option7():
 
 #------------88888--------------
 def handle_option8():
-    df2 = get_dados_2020()[["ID_RESP_2020", 'ÍNDICE DE TRANSPARÊNCIA CALCULADO']]
+    df2 = get_dados_2020()[["ID_RESP_2020", "NOME_EMPRESA", 'ÍNDICE DE TRANSPARÊNCIA CALCULADO']].copy()
     df2.rename(columns={'ÍNDICE DE TRANSPARÊNCIA CALCULADO': "índice"}, inplace=True)
-    dfoc = get_dados_FOC()[["ID_RESP_2020", 'ÍNDICE DE TRANSPARÊNCIA CALCULADO']]
-    dfoc.rename(columns={'ÍNDICE DE TRANSPARÊNCIA CALCULADO': "índice"}, inplace=True)
 
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante    
-    dfoc["ID_RESP_2020"] = dfoc["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante    
+    dfoc = get_dados_FOC()[["ID_RESP_2020", 'ÍNDICE DE TRANSPARÊNCIA CALCULADO']].copy()
+    dfoc.rename(columns={'ÍNDICE DE TRANSPARÊNCIA CALCULADO': "índice"}, inplace=True)
 
     #left join dos dados de 2020 e da foc2016 (há empresas de 2020 que não estavam em 2016):
     df2 = df2.merge(dfoc, on="ID_RESP_2020", how = "left", suffixes=('_2020', '_2016'))
@@ -959,14 +1027,15 @@ def handle_option8():
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df2
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
         st.dataframe(datf)
 
-    df3 = df2.sort_values(by='ID_RESP_2020', ascending=True)
-    df3.rename(columns={'ID_RESP_2020': 'empresa'}, inplace=True)
-    df3['empresa'] = 'ID-RESP-' + df3['empresa']
+    df2 = df2.drop("ID_RESP_2020", axis=1) #só precisava para os merges e visualização datatable
+
+    df3 = df2.sort_values(by='NOME_EMPRESA', ascending=True)
+    df3.rename(columns={'NOME_EMPRESA': 'empresa'}, inplace=True)
 
     st_chk_radar = st.sidebar.checkbox('Marque aqui para ver este gráfico no formato "Radar" ', value=False)
     st_width, st_height = put_sliders_sidebar(option, side_ph, st_chk_radar) #poe sliders para altura/largura do gráfico
@@ -1069,49 +1138,45 @@ def handle_option8():
 
 #------------99999--------------
 def handle_option9():
-    df2 = get_dados_2020()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
-    dfoc = get_dados_FOC()[["ID_RESP_2020"] + assuntos] # id e todos assuntos, para plotar planilha
-
-    df2["ID_RESP_2020"] = df2["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante    
-    dfoc["ID_RESP_2020"] = dfoc["ID_RESP_2020"].astype(str)  # Precisa usar como string adiante        
+    df2 = get_dados_2020()[["ID_RESP_2020", "NOME_EMPRESA"] + assuntos].copy() # id e todos assuntos, para plotar planilha
+    dfoc = get_dados_FOC()[["ID_RESP_2020", "NOME_EMPRESA"] + assuntos].copy() # id e todos assuntos, para plotar planilha
 
     st_chk_dados = st.sidebar.checkbox('Marque aqui para visualizar a planilha de dados ', value=False)
 
     #seleciona uma empresa para o gráfico:
     st.markdown('#### Selecione abaixo a empresa a ser apresentada no gráfico:')
-    empresas = 'ID-RESP-' + df2["ID_RESP_2020"]  # nomes das empresas
-    ids = df2["ID_RESP_2020"]
-    dic_empresas = dict(zip(empresas, ids))
-    st_empresa = st.selectbox("", empresas)      # apresenta pelo "nome"
-    st_empresa = dic_empresas.get(st_empresa)    # mas usa só ID numérico
+    empresas = df2["NOME_EMPRESA"]  # nomes das empresas
+    st_empresa = st.selectbox(label="Empresa", options=empresas, label_visibility="hidden")  # apresenta pelo nome
 
     #prepara os dados para o gráfico 
     ## pega nos dados 2020 só a linha da empresa selecionada: 
-    df3 = df2.loc[df2["ID_RESP_2020"]==st_empresa]
+    df3 = df2.loc[df2["NOME_EMPRESA"]==st_empresa]
+    id_resp_2020 = df3.iloc[-1]["ID_RESP_2020"] #sabemos que só há 1 linha, pega a "última"/única
     ## pega nos dados da Foc2016 só a linha da empresa selecionada: 
-    dfoc3 = dfoc.loc[dfoc["ID_RESP_2020"]==st_empresa]
+    dfoc3 = dfoc.loc[dfoc["ID_RESP_2020"]==id_resp_2020]
 
     #se o loc acima é "vazio", é o caso de empresa que NÃO participou da foc2016:
     if len(dfoc3) == 0:
-        col_names = ["ID_RESP_2020"] + assuntos # id e todos assuntos
-        values = [st_empresa] + [pd.NA] * len(assuntos)
+        col_names = ["ID_RESP_2020", "NOME_EMPRESA"] + assuntos # id,nome e todos assuntos
+        values = [id_resp_2020, st_empresa] + [pd.NA] * len(assuntos)
         dfoc3 = pd.DataFrame([values], columns = col_names)
 
     ## junta as linhas de dados de 2016 e 2020 da mesma empresa: 
     #df3 = df3.append(dfoc3, ignore_index=True )  # substituído pelo concat() abaixo
-    df3 = pd.concat([df3, dfoc3], ignore_index=True )
+    df3 = pd.concat([df3, dfoc3], ignore_index=True, axis=0 ) # concatena linhas
+    df3 = df3.rename(index={0: '2020', 1: '2016'})
 
     if st_chk_dados:
         #usa locale para fazer os valores decimais aparecerem com separador "," na planilha plotada:
         datf = df3
         #datf = datf.style.format(lambda x: locale.format_string('%.4f', x) if isinstance(x, (int, float)) else x )  #só funciona em jupyter-notebook
-        datf = datf.applymap( lambda x: 
+        datf = datf.map( lambda x: 
             x if isinstance(x, (int, float)) and math.isnan(x) else
             locale.format_string('%.4f', x) if isinstance(x, float) else x)
         st.dataframe(datf)
 
     #transpõe, ajusta nome de colunas e ordena:
-    df3 = df3.drop("ID_RESP_2020", axis=1) #não mais necessária esta coluna
+    df3 = df3.drop(["ID_RESP_2020", "NOME_EMPRESA"], axis=1) #não mais necessárias estas colunas
     df3 = df3.T.reset_index()  #isso gera uma coluna "index", outra '0' e outra "1"
     df3.columns=['assunto', '2020', '2016']
     df3 = df3.sort_values(by='assunto', ascending=True)
